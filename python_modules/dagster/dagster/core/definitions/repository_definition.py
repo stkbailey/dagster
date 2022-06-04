@@ -11,6 +11,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Type,
     TypeVar,
     Union,
@@ -33,6 +34,7 @@ from .utils import check_valid_name
 
 if TYPE_CHECKING:
     from dagster.core.asset_defs.asset_group import AssetGroup
+    from dagster.core.asset_defs.assets import AssetsDefinition
 
 VALID_REPOSITORY_DATA_DICT_KEYS = {
     "pipelines",
@@ -434,7 +436,7 @@ class CachingRepositoryData(RepositoryData):
         ],
         schedules: Mapping[str, Union[ScheduleDefinition, Resolvable[ScheduleDefinition]]],
         sensors: Mapping[str, Union[SensorDefinition, Resolvable[SensorDefinition]]],
-        source_assets: Mapping[AssetKey, SourceAsset],
+        source_assets_by_key: Mapping[AssetKey, SourceAsset],
     ):
         """Constructs a new CachingRepositoryData object.
 
@@ -458,7 +460,7 @@ class CachingRepositoryData(RepositoryData):
                 The schedules belonging to the repository.
             sensors (Mapping[str, Union[SensorDefinition, Callable[[], SensorDefinition]]]):
                 The sensors belonging to a repository.
-            source_assets (Mapping[AssetKey, SourceAsset]): The source assets belonging to a repository.
+            source_assets_by_key (Mapping[AssetKey, SourceAsset]): The source assets belonging to a repository.
         """
         check.mapping_param(
             pipelines, "pipelines", key_type=str, value_type=(PipelineDefinition, FunctionType)
@@ -477,7 +479,7 @@ class CachingRepositoryData(RepositoryData):
             sensors, "sensors", key_type=str, value_type=(SensorDefinition, FunctionType)
         )
         check.mapping_param(
-            source_assets, "source_assets", key_type=AssetKey, value_type=SourceAsset
+            source_assets_by_key, "source_assets_by_key", key_type=AssetKey, value_type=SourceAsset
         )
 
         self._pipelines = _CacheingDefinitionIndex(
@@ -508,7 +510,7 @@ class CachingRepositoryData(RepositoryData):
             for schedule in self._schedules.get_all_definitions()
             if isinstance(schedule, PartitionScheduleDefinition)
         ]
-        self._source_assets = source_assets
+        self._source_assets_by_key = source_assets_by_key
 
         def load_partition_sets_from_pipelines() -> List[PartitionSetDefinition]:
             job_partition_sets = []
@@ -608,7 +610,7 @@ class CachingRepositoryData(RepositoryData):
                     f"Object mapped to {key} is not an instance of JobDefinition or GraphDefinition."
                 )
 
-        return CachingRepositoryData(**repository_definitions, source_assets={})
+        return CachingRepositoryData(**repository_definitions, source_assets_by_key={})
 
     @classmethod
     def from_list(
@@ -631,14 +633,15 @@ class CachingRepositoryData(RepositoryData):
                 Use this constructor when you have no need to lazy load pipelines/jobs or other
                 definitions.
         """
-        from dagster.core.asset_defs import AssetGroup
+        from dagster.core.asset_defs import AssetGroup, AssetsDefinition
 
         pipelines_or_jobs: Dict[str, Union[PipelineDefinition, JobDefinition]] = {}
         coerced_graphs: Dict[str, JobDefinition] = {}
         partition_sets: Dict[str, PartitionSetDefinition] = {}
         schedules: Dict[str, ScheduleDefinition] = {}
         sensors: Dict[str, SensorDefinition] = {}
-        source_assets: Dict[AssetKey, SourceAsset] = {}
+        assets_defs: List[AssetsDefinition] = []
+        source_assets: List[SourceAsset] = []
         combined_asset_group = None
         for definition in repository_definitions:
             if isinstance(definition, PipelineDefinition):
@@ -697,23 +700,36 @@ class CachingRepositoryData(RepositoryData):
                     )
                 pipelines_or_jobs[coerced.name] = coerced
                 coerced_graphs[coerced.name] = coerced
-
             elif isinstance(definition, AssetGroup):
                 if combined_asset_group:
                     combined_asset_group += definition
                 else:
                     combined_asset_group = definition
+            elif isinstance(definition, AssetsDefinition):
+                assets_defs.append(definition)
+            elif isinstance(definition, SourceAsset):
+                source_assets.append(definition)
             else:
                 check.failed(f"Unexpected repository entry {definition}")
+
+        if assets_defs or source_assets:
+            if combined_asset_group is not None:
+                raise DagsterInvalidDefinitionError(
+                    "A repository can't have both an AssetGroup and direct asset defs"
+                )
+            _validate_asset_resources(assets_defs, source_assets)
+            combined_asset_group = AssetGroup(assets=assets_defs, source_assets=source_assets)
 
         if combined_asset_group:
             for job_def in combined_asset_group.get_base_jobs():
                 pipelines_or_jobs[job_def.name] = job_def
 
-            source_assets = {
+            source_assets_by_key = {
                 source_asset.key: source_asset
                 for source_asset in combined_asset_group.source_assets
             }
+        else:
+            source_assets_by_key = {}
 
         for name, sensor_def in sensors.items():
             if sensor_def.has_loadable_targets():
@@ -744,7 +760,7 @@ class CachingRepositoryData(RepositoryData):
             partition_sets=partition_sets,
             schedules=schedules,
             sensors=sensors,
-            source_assets=source_assets,
+            source_assets_by_key=source_assets_by_key,
         )
 
     def get_pipeline_names(self) -> List[str]:
@@ -965,7 +981,7 @@ class CachingRepositoryData(RepositoryData):
         return self._sensors.has_definition(sensor_name)
 
     def get_source_assets_by_key(self) -> Mapping[AssetKey, SourceAsset]:
-        return self._source_assets
+        return self._source_assets_by_key
 
     def _check_solid_defs(self, pipelines: List[PipelineDefinition]) -> None:
         solid_defs = {}
@@ -1230,6 +1246,13 @@ def _process_and_validate_target(
                 )
             )
         pipelines_or_jobs[target.name] = target
+
+
+def _validate_asset_resources(
+    assets_defs: Sequence["AssetsDefinition"], source_assets: Sequence[SourceAsset]
+):
+    """Validate that all asset resource requirements are satisfied and that no two assets have
+    conflicting definitions for the same resource"""
 
 
 def _get_error_msg_for_target_conflict(targeter, target_type, target_name, dupe_target_type):

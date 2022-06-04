@@ -22,6 +22,7 @@ from dagster import (
     op,
     pipeline,
     repository,
+    resource,
     schedule,
     sensor,
     solid,
@@ -644,6 +645,86 @@ def test_multiple_asset_groups_one_repo():
         AssetKey(["asset1"]),
         AssetKey(["asset2"]),
     }
+
+
+def test_direct_assets():
+    foo = SourceAsset("foo")
+
+    @asset
+    def asset1():
+        ...
+
+    @asset
+    def asset2():
+        ...
+
+    @repository
+    def my_repo():
+        return [foo, asset1, asset2]
+
+    assert len(my_repo.get_all_jobs()) == 1
+    assert set(my_repo.get_all_jobs()[0].asset_layer.asset_keys) == {
+        AssetKey(["asset1"]),
+        AssetKey(["asset2"]),
+    }
+
+
+def test_direct_asset_unsatified_resource():
+    @asset(required_resource_keys={"a"})
+    def asset1(context):
+        ...
+
+    with pytest.raises(
+        match="blah blah different resource definitions for the same resource key. plz use a different resource key."
+    ):
+
+        @repository
+        def my_repo():
+            return [asset1]
+
+
+def test_direct_asset_unsatified_resource_transitive():
+    @resource(required_resource_keys={"b"})
+    def resource1():
+        ...
+
+    @asset(resource_defs={"a": resource1})
+    def asset1(context):
+        ...
+
+    with pytest.raises(
+        match="blah blah different resource definitions for the same resource key. plz use a different resource key."
+    ):
+
+        @repository
+        def my_repo():
+            return [asset1]
+
+
+def test_direct_assets_conflicting_resources():
+    @resource
+    def resource1():
+        ...
+
+    @resource
+    def resource2():
+        ...
+
+    @asset(resource_defs={"foo": resource1})
+    def asset1(context):
+        ...
+
+    @asset(resource_defs={"foo": resource2})
+    def asset2(context):
+        ...
+
+    with pytest.raises(
+        match="blah blah different resource definitions for the same resource key. plz use a different resource key."
+    ):
+
+        @repository
+        def my_repo():
+            return [asset1, asset2]
 
 
 def _create_graph_with_name(name):
