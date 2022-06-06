@@ -15,7 +15,7 @@ from ..repository_definition import (
 )
 from ..schedule_definition import ScheduleDefinition
 from ..sensor_definition import SensorDefinition
-from ..unresolved_job_definition import UnresolvedJobDefinition
+from ..unresolved_asset_job_definition import UnresolvedAssetJobDefinition
 
 
 class _Repository:
@@ -44,7 +44,7 @@ class _Repository:
                     or isinstance(definition, SensorDefinition)
                     or isinstance(definition, GraphDefinition)
                     or isinstance(definition, AssetGroup)
-                    or isinstance(definition, UnresolvedJobDefinition)
+                    or isinstance(definition, UnresolvedAssetJobDefinition)
                 ):
                     bad_definitions.append((i, type(definition)))
             if bad_definitions:
