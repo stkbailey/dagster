@@ -416,7 +416,7 @@ def wires_input(x):
     op_with_input(x)
 ```
 
-I can turn the graph into a job by calling <PyObject object="GraphDefinition" method="to_job" />, and can provide a value to the input `x` using the `input_values` argument.
+Turn the graph into a job by calling <PyObject object="GraphDefinition" method="to_job" /> and providing a value to the input `x` using the `input_values` argument:
 
 ```python file=/concepts/ops_jobs_graphs/jobs.py startafter=start_top_level_input_job endbefore=end_top_level_input_job
 the_job = wires_input.to_job(input_values={"x": 5})
