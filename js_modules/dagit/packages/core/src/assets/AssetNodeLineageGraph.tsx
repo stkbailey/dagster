@@ -4,6 +4,7 @@ import {useHistory} from 'react-router-dom';
 import styled from 'styled-components/macro';
 
 import {AssetConnectedEdges} from '../asset-graph/AssetEdges';
+import {EXPERIMENTAL_MINI_SCALE} from '../asset-graph/AssetGraphExplorer';
 import {AssetNodeMinimal, AssetNode} from '../asset-graph/AssetNode';
 import {ForeignNode} from '../asset-graph/ForeignNode';
 import {buildComputeStatusData, GraphData, LiveData, toGraphId} from '../asset-graph/Utils';
@@ -13,7 +14,7 @@ import {useAssetLayout} from '../graph/asyncGraphLayout';
 import {AssetKey} from './types';
 import {AssetNodeDefinitionFragment} from './types/AssetNodeDefinitionFragment';
 
-const EXPERIMENTAL_MINI_SCALE = 0.5;
+const LINEAGE_GRAPH_ZOOM_LEVEL = 'lineageGraphZoomLevel';
 
 export type AssetLineageScope = 'neighbors' | 'upstream' | 'downstream';
 
@@ -36,7 +37,8 @@ export const AssetNodeLineageGraph: React.FC<{
 
   React.useEffect(() => {
     if (viewportEl.current && layout) {
-      viewportEl.current.autocenter(false);
+      const lastZoomLevel = Number(window.localStorage.getItem(LINEAGE_GRAPH_ZOOM_LEVEL));
+      viewportEl.current.autocenter(false, lastZoomLevel);
       viewportEl.current.focus();
     }
   }, [viewportEl, layout, assetGraphId]);
@@ -67,8 +69,9 @@ export const AssetNodeLineageGraph: React.FC<{
       maxZoom={1.2}
       maxAutocenterZoom={1.2}
     >
-      {({scale: _scale}) => (
+      {({scale}) => (
         <SVGContainer width={layout.width} height={layout.height}>
+          {viewportEl.current && <SVGSaveZoomLevel scale={scale} />}
           <AssetConnectedEdges highlighted={highlighted} edges={layout.edges} />
 
           {Object.values(layout.nodes).map(({id, bounds}) => {
@@ -90,7 +93,7 @@ export const AssetNodeLineageGraph: React.FC<{
               >
                 {!graphNode || !graphNode.definition.opNames.length ? (
                   <ForeignNode assetKey={{path}} />
-                ) : _scale < EXPERIMENTAL_MINI_SCALE ? (
+                ) : scale < EXPERIMENTAL_MINI_SCALE ? (
                   <AssetNodeMinimal
                     definition={graphNode.definition}
                     selected={graphNode.id === assetGraphId}
@@ -110,6 +113,13 @@ export const AssetNodeLineageGraph: React.FC<{
       )}
     </SVGViewport>
   );
+};
+
+const SVGSaveZoomLevel = ({scale}: {scale: number}) => {
+  React.useEffect(() => {
+    window.localStorage.setItem(LINEAGE_GRAPH_ZOOM_LEVEL, `${scale}`);
+  }, [scale]);
+  return <></>;
 };
 
 const SVGContainer = styled.svg`
