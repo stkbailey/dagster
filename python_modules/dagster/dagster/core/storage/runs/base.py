@@ -387,3 +387,18 @@ class RunStorage(ABC, MayHaveInstanceWeakref):
 
     def alembic_version(self):
         return None
+
+    # Key Value Storage
+    #
+    # Stores arbitrary key-value pairs. Currently used for the cursor for the auto-reexecution
+    # deamon. Bundled into run storage for convenience.
+
+    @abstractmethod
+    def supports_kvs(self):
+        return True
+
+    def kvs_get(self, keys: Set[str]) -> Dict[str, str]:
+        """Retrieve the value for a given key in the current deployment."""
+
+    def kvs_set(self, pairs: Dict[str, str]) -> None:
+        """Set the value for a given key in the current deployment."""
