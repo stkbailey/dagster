@@ -36,7 +36,11 @@ export const AssetGroupRoot: React.FC<{repoAddress: RepoAddress}> = ({repoAddres
     <Page style={{display: 'flex', flexDirection: 'column', paddingBottom: 0}}>
       <PageHeader
         title={<Heading>{groupName}</Heading>}
-        right={<ReloadAllButton label="Reload definitions" />}
+        right={
+          <div style={{marginBottom: -8}}>
+            <ReloadAllButton label="Reload definitions" />
+          </div>
+        }
         tags={
           <Tag icon="asset_group">
             Asset Group in <RepositoryLink repoAddress={repoAddress} />
