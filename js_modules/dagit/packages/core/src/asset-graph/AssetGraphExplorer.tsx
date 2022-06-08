@@ -155,9 +155,6 @@ export const AssetGraphExplorerWithData: React.FC<
     selectedAssetValues.includes(tokenForAssetKey(node.definition.assetKey)),
   );
   const lastSelectedNode = selectedGraphNodes[selectedGraphNodes.length - 1];
-  const launchGraphNodes = selectedGraphNodes.length
-    ? selectedGraphNodes
-    : Object.values(assetGraphData.nodes).filter((a) => !isSourceAsset(a.definition));
 
   const {layout, loading, async} = useAssetLayout(assetGraphData);
 
@@ -403,11 +400,23 @@ export const AssetGraphExplorerWithData: React.FC<
                 dataDescription="materializations"
               />
 
-              <LaunchAssetExecutionButton
-                assetKeys={launchGraphNodes.map((n) => n.assetKey)}
-                liveDataByNode={liveDataByNode}
-                preferredJobName={explorerPath.pipelineName}
-              />
+              {selectedGraphNodes.length ? (
+                <LaunchAssetExecutionButton
+                  assetKeys={selectedGraphNodes.map((n) => n.assetKey)}
+                  liveDataByNode={liveDataByNode}
+                  preferredJobName={explorerPath.pipelineName}
+                  context="selected"
+                />
+              ) : (
+                <LaunchAssetExecutionButton
+                  assetKeys={Object.values(assetGraphData.nodes)
+                    .filter((a) => !isSourceAsset(a.definition))
+                    .map((n) => n.assetKey)}
+                  liveDataByNode={liveDataByNode}
+                  preferredJobName={explorerPath.pipelineName}
+                  context="all"
+                />
+              )}
             </Box>
           </Box>
           <QueryOverlay>
